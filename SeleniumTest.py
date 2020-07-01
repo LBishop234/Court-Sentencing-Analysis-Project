@@ -1,4 +1,4 @@
-import time, requests, certifi, ssl
+import time, requests
 import selenium
 from selenium.webdriver import Chrome
 from selenium.webdriver.support.ui import WebDriverWait
