@@ -349,7 +349,7 @@ count = 0
 nextPage = 0
 targetPage = 0
 currentPage = 1
-while count < 1000:
+while count < 10000:
 	if nextPage == 0:
 		FillSearchFields() 
 	nextPage = 0
