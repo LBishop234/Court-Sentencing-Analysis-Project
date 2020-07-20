@@ -64,10 +64,7 @@ def FillSearchFields():
 
 	#selects the court type and court location 
 	courtType.send_keys("Crown Court")
-	driver.implicitly_wait(2)
-	#court = driver.find_element_by_id("court_location")
-	#court.send_keys("Leeds Crown Court")
-	driver.implicitly_wait(2)
+	WebDriverWait(driver, 5).until(lambda d: d.find_element_by_id("court_location"))
 	#selects the searcg button and clicks it
 	searchButton = driver.find_element_by_id("submitButton")
 	searchButton.click()
@@ -76,6 +73,7 @@ def FillSearchFields():
 	WebDriverWait(driver, 10).until(lambda d: d.find_element_by_id("myTable"))
 
 def CheckID(ID):
+	#checks if the passed ID already is held in the database
 	query = db.select([records]).where(records.columns.ID == ID)
 	resultProxy = connection.execute(query)
 	results = resultProxy.fetchall()
@@ -109,19 +107,47 @@ def LoadEntry():
 	WebDriverWait(driver, 10).until(lambda d: d.find_element_by_id("maincontent"))
 	return ID
 
-def NextResultPage():
+def NextResultPage(targetPage):
+	driver.implicitly_wait(2)
 	try:
-		nextButton = driver.find_element_by_class_name('next')
-		nextButton.click()
-	except:
-		return -1
-	try:
-		driver.implicitly_wait(5)
-		dismissButton = driver.find_element_by_xpath('/html/body/div/div[1]/div[1]')
-		driver.refresh()
+		#gets the page number and links
+		pageNosParent = driver.find_element_by_class_name('pagination')
+		currentPageButton = pageNosParent.find_element_by_class_name('current')
+		currentPageText = currentPageButton.text
+		#clicks to the next page if the current page has been exhausted
+		if str(targetPage) == currentPageText:
+			nextButton = driver.find_element_by_class_name('next')
+			nextButton.click()
+			return 1
+		try: 
+			#if the target page is one of the page links clicks the link
+			targetLink = driver.find_element_by_link_text(targetPage)
+			targetLink.click()
+			return 1
+		except:
+			#if rerunning the program with an existing database clicks 
+			if targetPage == 0:
+				nextButton = driver.find_element_by_class_name('next')
+				nextButton.click()
+			#clicks onto the furtherst most page link towards the desired page
+			else:
+				if currentPageText == '1':
+					pageLink = driver.find_element_by_xpath('/html/body/div[7]/div[9]/table[1]/tbody/tr[1]/td/table/tbody/tr/td/div/a[6]')
+					pageLink.click()
+				else:
+					pageLink = driver.find_element_by_xpath('/html/body/div[7]/div[9]/table[1]/tbody/tr[1]/td/table/tbody/tr/td/div/a[7]')
+					pageLink.click()
+			return 1
 	except:
 		pass
-	return 1
+	#if an ad appears reloads the page
+	try:
+		dismissButton = driver.find_element_by_xpath('/html/body/div/div[1]/div[1]')
+		driver.refresh()
+		return 1
+	except:
+		pass
+	return -1
 
 def ScrapeEntry():
 	html = driver.page_source
@@ -207,10 +233,13 @@ def ExtractValuesFromData(dataList, ID):
 		elif dataList[count] == 'Mitigating & Aggravating Factors':
 			data[18] = dataList[count + 1]
 		elif dataList[count] == 'Sentenced':
+			flag = True
 			data[19] = dataList[count + 1]
 		elif dataList[count] == 'Prosecuting Authority':
+			flag = True
 			data[20] = dataList[count + 1]
 		elif dataList[count] == 'Police Area':
+			flag = True
 			data[21] = dataList[count + 1]
 		#extra code to select the multiple possible charges/sentances
 		if flag == True:
@@ -228,20 +257,25 @@ def ExtractValuesFromData(dataList, ID):
 	return data
 
 def ConvertToDate(preDate):
-	if str(preDate).find('-') != -1:
-		dateList = preDate.split('-')
-	elif str(preDate).find('/') != -1:
-		dateList = preDate.split('/')
-	flag = False
-	while flag == False:
-		try:
-			date = datetime.date(int(dateList[2]), int(dateList[1]), int(dateList[0]))
-			flag = True
-		except:
-			dateList[0] = str(int(dateList[0]) - 1)
-	return date
+	#converts a date string to a date data type
+	try:
+		if str(preDate).find('-') != -1:
+			dateList = preDate.split('-')
+		elif str(preDate).find('/') != -1:
+			dateList = preDate.split('/')
+		flag = False
+		while flag == False:
+			try:
+				date = datetime.date(int(dateList[2]), int(dateList[1]), int(dateList[0]))
+				flag = True
+			except:	
+				dateList[0] = str(int(dateList[0]) - 1)
+		return date
+	except:
+		return None
 
 def CheckingForTable(engine):
+	#checks if the record table exists
 	tables = engine.table_names()
 	if 'CourtRecords' in tables:
 		return True
@@ -313,10 +347,14 @@ else:
 captchaCheck = False
 count = 0
 nextPage = 0
-while count < 40:
+targetPage = 0
+currentPage = 1
+while count < 1000:
 	if nextPage == 0:
-		FillSearchFields()
+		FillSearchFields() 
 	nextPage = 0
+	currentPage = driver.find_element_by_class_name('current').text
+	print('currentPage: ' + str(currentPage))
 	entryID = LoadEntry()
 	captchaCheck = CheckForCaptcha()
 	if captchaCheck == True:
@@ -324,9 +362,11 @@ while count < 40:
 		nextPage == 0
 		driver.quit()
 		driver = Chrome()
-		driver.implicitly_wait(5)
+		driver.implicitly_wait(2)
 		Login()
 	elif str(entryID) != '-1':
+		targetPage = currentPage
+		print('targetPage: ' + str(targetPage))
 		scrapedEntryData = ScrapeEntry()
 		valuesEntryData = ExtractValuesFromData(scrapedEntryData, entryID)
 		print(valuesEntryData)
@@ -334,10 +374,7 @@ while count < 40:
 		count = count + 1
 		print('count: '+ str(count))
 	else:
-		nextPage = NextResultPage()
+		nextPage = NextResultPage(targetPage)
 		if nextPage == -1:
 			break
-
-while True:
-	pass
 driver.quit()
