@@ -144,9 +144,6 @@ def NextResultPage(targetPage):
 					pageLink = driver.find_element_by_xpath('/html/body/div[7]/div[9]/table[1]/tbody/tr[1]/td/table/tbody/tr/td/div/a[7]')
 					pageLink.click()
 			return 1
-		if currentPage > targetPage:
-			targetPage == currentPage
-			return 1
 	except:
 		pass
 	#if an ad appears reloads the page
@@ -186,7 +183,8 @@ def ScrapeEntry():
 			strippedList.append(holdList[x])
 	count = 0
 	while count < len(strippedList):
-		if strippedList[count].find(':') != -1:
+		#if strippedList[count].find(':') != -1:
+		if strippedList[count] == (':'):
 			del strippedList[count]
 		else:
 			count = count + 1
@@ -363,7 +361,6 @@ currentPage = 1
 exceptionCount = 0
 while count < 10000:
 	try:
-		exceptionCount = 0
 		if nextPage == 0:
 			FillSearchFields() 
 		nextPage = 0
@@ -393,10 +390,11 @@ while count < 10000:
 			nextPage = NextResultPage(targetPage)
 			if nextPage == -1:
 				break
+		exceptionCount = 0
 	except:
 		exceptionCount = exceptionCount + 1
 		print('exception check')
-		if exceptionCount > 10:
+		if exceptionCount > 3:
 			print('EXCEPTION FOUND!')
 			break
 
