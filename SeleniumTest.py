@@ -7,6 +7,12 @@ from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 from selenium.webdriver import Chrome
 
+UserName = "LMBishop"
+Password = "Canford2014B"
+CalStartMonth = "May, 2019"
+CalEndMonth = "May, 2020"
+EndDate = '06/2020'
+
 def AcceptCookies():
 	#clicks on (therefore removing) the cookies popup
 	popupButton = driver.find_element_by_id("submitButtons")
@@ -24,8 +30,8 @@ def Login():
 	AcceptCookies()
 
 	#fills in values and logs in
-	userName.send_keys("LMBishop")
-	password.send_keys("Canford2014B")
+	userName.send_keys(UserName)
+	password.send_keys(Password)
 	remeberMe.click()
 	login.click()
 
@@ -48,7 +54,7 @@ def FillSearchFields():
 	backYear1 = driver.find_element_by_xpath("/html/body/div[8]/table/thead/tr[2]/td[1]")
 	backMonth1 = driver.find_element_by_xpath("/html/body/div[8]/table/thead/tr[2]/td[2]")
 	backYear1.click()
-	while(currentSelected1.text != "May, 2019"):
+	while(currentSelected1.text != CalStartMonth):
 		backMonth1.click()
 	selectDay1 = driver.find_element_by_xpath("/html/body/div[7]/div[9]/table/tbody/tr/td/form/table/tbody/tr[1]/td/div/div/table/tbody/tr[4]/td[3]")
 	selectDay1.click()
@@ -57,14 +63,14 @@ def FillSearchFields():
 	cal2.click()
 	currentSelected2 = driver.find_element_by_xpath("/html/body/div[8]/table/thead/tr[1]/td")
 	backMonth2 = driver.find_element_by_xpath("/html/body/div[8]/table/thead/tr[2]/td[2]")
-	while(currentSelected2.text != "May, 2020"):
+	while(currentSelected2.text != CalEndMonth):
 		backMonth2.click()
 	selectDay2 = driver.find_element_by_xpath("/html/body/div[7]/div[9]/table/tbody/tr/td/form/table/tbody/tr[1]/td/div/div/table/tbody/tr[11]/td[3]/label/input")
 	selectDay2.click()
 
 	#selects the court type and court location 
 	courtType.send_keys("Crown Court")
-	WebDriverWait(driver, 5).until(lambda d: d.find_element_by_id("court_location"))
+	WebDriverWait(driver, 10).until(lambda d: d.find_element_by_id("court_location"))
 	#selects the searcg button and clicks it
 	searchButton = driver.find_element_by_id("submitButton")
 	searchButton.click()
@@ -137,6 +143,9 @@ def NextResultPage(targetPage):
 				else:
 					pageLink = driver.find_element_by_xpath('/html/body/div[7]/div[9]/table[1]/tbody/tr[1]/td/table/tbody/tr/td/div/a[7]')
 					pageLink.click()
+			return 1
+		if currentPage > targetPage:
+			targetPage == currentPage
 			return 1
 	except:
 		pass
@@ -329,6 +338,8 @@ def CheckForCaptcha():
 	except:
 		return False
 
+startTime = datetime.datetime.now()
+print('Start Time: ' + str(startTime))
 
 Chrome(executable_path='C:/WebDriver/bin/chromedriver')
 driver = Chrome()
@@ -349,32 +360,49 @@ count = 0
 nextPage = 0
 targetPage = 0
 currentPage = 1
+exceptionCount = 0
 while count < 10000:
-	if nextPage == 0:
-		FillSearchFields() 
-	nextPage = 0
-	currentPage = driver.find_element_by_class_name('current').text
-	print('currentPage: ' + str(currentPage))
-	entryID = LoadEntry()
-	captchaCheck = CheckForCaptcha()
-	if captchaCheck == True:
-		captchaCheck = False
-		nextPage == 0
-		driver.quit()
-		driver = Chrome()
-		driver.implicitly_wait(2)
-		Login()
-	elif str(entryID) != '-1':
-		targetPage = currentPage
-		print('targetPage: ' + str(targetPage))
-		scrapedEntryData = ScrapeEntry()
-		valuesEntryData = ExtractValuesFromData(scrapedEntryData, entryID)
-		print(valuesEntryData)
-		PassInEntry(records, valuesEntryData)
-		count = count + 1
-		print('count: '+ str(count))
-	else:
-		nextPage = NextResultPage(targetPage)
-		if nextPage == -1:
+	try:
+		exceptionCount = 0
+		if nextPage == 0:
+			FillSearchFields() 
+		nextPage = 0
+		currentPage = driver.find_element_by_class_name('current').text
+		entryID = LoadEntry()
+		captchaCheck = CheckForCaptcha()
+		if captchaCheck == True:
+			captchaCheck = False
+			nextPage == 0
+			driver.quit()
+			driver = Chrome()
+			driver.implicitly_wait(2)
+			Login()
+		elif str(entryID) != '-1':
+			targetPage = currentPage
+			print('targetPage: ' + str(targetPage))
+			scrapedEntryData = ScrapeEntry()
+			valuesEntryData = ExtractValuesFromData(scrapedEntryData, entryID)
+			print(valuesEntryData)
+			if EndDate in valuesEntryData[2]:
+				print('Scraped all records within specified time frame')
+				break
+			PassInEntry(records, valuesEntryData)
+			count = count + 1
+			print('count: '+ str(count))
+		else:
+			nextPage = NextResultPage(targetPage)
+			if nextPage == -1:
+				break
+	except:
+		exceptionCount = exceptionCount + 1
+		print('exception check')
+		if exceptionCount > 10:
+			print('EXCEPTION FOUND!')
 			break
+
+
+endTime = datetime.datetime.now()
+elapsedTime = endTime - startTime
+print('End Time: ' + str(endTime))
+print('Elapsed Time: ' + str(elapsedTime))
 driver.quit()
