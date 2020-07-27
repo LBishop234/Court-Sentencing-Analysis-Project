@@ -1,25 +1,113 @@
-import time, selenium, requests, re, sqlite3, datetime
+import time, selenium, re, datetime, threading, _thread
+#import requests, sqlite3
 import urllib.request as urllib2
 import sqlalchemy as db
 from selenium.webdriver import Chrome
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
-from selenium.webdriver import Chrome
+from contextlib import contextmanager
 
 UserName = "LMBishop"
 Password = "Canford2014B"
-CalStartMonth = "May, 2019"
-CalEndMonth = "May, 2020"
-EndDate = '06/2020'
+#inclusive
+CalStartDay = 1
+CalStartMonth = "January"
+CalStartYear = 2019
+#exclusive
+CalEndDay = 1
+CalEndMonth = "January"
+CalEndYear = 2020
 
-def AcceptCookies():
+class CalendarDate:
+	day = 0
+	month = 'Hold'
+	year = 0
+
+	def __init__(self, d, m, y):
+		self.day = int(d)
+		self.month = str(m)
+		self.year = int(y)
+
+	def Set_Date(self, d, m, y):
+		self.day = int(d)
+		self.month = str(m)
+		self.year = int(y)
+
+	def Next_Month(self):
+		if self.month == 'January':
+			self.month = 'Febuary'
+		elif self.month == 'Febuary':
+			self.month = 'March'
+		elif self.month == 'March':
+			self.month = 'April'
+		elif self.month == 'April':
+			self.month = 'May'
+		elif self.month == 'May':
+			self.month = 'June'
+		elif self.month == 'June':
+			self.month = 'July'
+		elif self.month == 'July':
+			self.month = 'August'
+		elif self.month == 'August':
+			self.month = 'September'
+		elif self.month == 'September':
+			self.month = 'October'
+		elif self.month == 'October':
+			self.month = 'November'
+		elif self.month == 'November':
+			self.month = 'December'
+		elif self.month == 'December':
+			self.month = 'January'
+
+	def Next_Day(self):
+		if self.day < 30 and self.day != 28:
+			self.day = self.day + 1
+		elif self.day == 28:
+			if self.month == 'Febuary':
+				self.day = 1
+				Next_Month()
+			else:
+				self.day = self.day + 1
+		elif self.day == 30:
+			if self.month == 'April' or self.month == 'June' or self.month == 'September' or self.month == 'November':
+				self.day = 1
+				Next_Month()
+			else:
+				self.day = self.day + 1
+		elif self.day == 31:
+			if self.month == 'December':
+				Next_Year()
+			self.day = 1
+			Next_Month()
+
+	def Next_Year(self):
+		#blah
+		self.year = self.year + 1
+
+class TimeoutException(Exception):
+	def __init__(self, msg=''):
+		self.msg = msg
+
+@contextmanager
+def timeLimit(seconds, msg=''):
+	timer = threading.Timer(seconds, lambda: _thread.interrupt_main())
+	timer.start()
+	try:
+		yield
+	#except KeyboardInterrupt:
+	except:
+		raise TimeoutException("Operation timed out: {}".format(msg))
+	finally:
+		timer.cancel()
+
+def AcceptCookies(driver):
 	#clicks on (therefore removing) the cookies popup
 	popupButton = driver.find_element_by_id("submitButtons")
 	driver.implicitly_wait(2)
 	popupButton.click()
 
-def Login():
+def Login(driver):
 	#selects neccessery elements
 	driver.get("https://www.thelawpages.com/login.php")
 	userName = driver.find_element_by_id("user")
@@ -27,7 +115,7 @@ def Login():
 	remeberMe = driver.find_element_by_xpath("/html/body/div[7]/div[10]/table[1]/tbody/tr[2]/td/form/table/tbody/tr/td/center/div/div/div/div/div/table/tbody/tr[4]/td[3]/input")
 	login = driver.find_element_by_id("submitButton")
 
-	AcceptCookies()
+	AcceptCookies(driver)
 
 	#fills in values and logs in
 	userName.send_keys(UserName)
@@ -37,36 +125,60 @@ def Login():
 
 	WebDriverWait(driver, 10).until(lambda d: d.find_element_by_id("paneContent0"))
 
-def FillSearchFields():
+def FillSearchFields(driver, targetDate):
+	#return messages: 1=ok, 2=weekend day, -1=invalid
+	foundFlag = False
 	#loads the search page and waits till the page is loaded
 	driver.get("https://www.thelawpages.com/court-cases/court-case-search.php?mode=3")
 	assert len(driver.window_handles) == 1
 	WebDriverWait(driver, 10).until(EC.title_is("Crown Court Cases Results Criminal Sentences Crime Offence Judge Solicitor Barrister"))
 
-	#finds the first three
+	targetMonthYear = targetDate.month + ', ' + str(targetDate.year)
+
+	#finds the calendar and court type elements
 	cal1 = driver.find_element_by_id("cal1")
 	cal2 = driver.find_element_by_id("cal12")
 	courtType = driver.find_element_by_id("c_type")
 
-	#fills in the first date
+	#fills the dates
 	cal1.click()
 	currentSelected1 = driver.find_element_by_xpath("/html/body/div[8]/table/thead/tr[1]/td")
-	backYear1 = driver.find_element_by_xpath("/html/body/div[8]/table/thead/tr[2]/td[1]")
 	backMonth1 = driver.find_element_by_xpath("/html/body/div[8]/table/thead/tr[2]/td[2]")
-	backYear1.click()
-	while(currentSelected1.text != CalStartMonth):
+	while currentSelected1.text != targetMonthYear:
 		backMonth1.click()
-	selectDay1 = driver.find_element_by_xpath("/html/body/div[7]/div[9]/table/tbody/tr/td/form/table/tbody/tr[1]/td/div/div/table/tbody/tr[4]/td[3]")
-	selectDay1.click()
+	dayParentElement = driver.find_element_by_xpath('/html/body/div[8]/table/tbody')
+	dayElements = dayParentElement.find_elements_by_class_name('day.false')
+	weekendElements = dayParentElement.find_elements_by_class_name('day.false.weekend')
+	for count in range(len(dayElements)):
+		if dayElements[count].text == str(targetDate.day):
+			dayElements[count].click()
+			foundFlag = True
+			break
+	if foundFlag == False:
+		for count in range(len(weekendElements)):
+			if weekendElements[count].text == str(targetDate.day):
+				return 2
+		return -1
 
-	#fills in the second date
+	foundFlag = False
 	cal2.click()
 	currentSelected2 = driver.find_element_by_xpath("/html/body/div[8]/table/thead/tr[1]/td")
 	backMonth2 = driver.find_element_by_xpath("/html/body/div[8]/table/thead/tr[2]/td[2]")
-	while(currentSelected2.text != CalEndMonth):
+	while currentSelected2.text != targetMonthYear:
 		backMonth2.click()
-	selectDay2 = driver.find_element_by_xpath("/html/body/div[7]/div[9]/table/tbody/tr/td/form/table/tbody/tr[1]/td/div/div/table/tbody/tr[11]/td[3]/label/input")
-	selectDay2.click()
+	dayParentElement = driver.find_element_by_xpath('/html/body/div[8]/table/tbody')
+	dayElements = dayParentElement.find_elements_by_class_name('day.false')
+	weekendElements = dayParentElement.find_elements_by_class_name('day.false.weekend')
+	for count in range(len(dayElements)):
+		if dayElements[count].text == str(targetDate.day):
+			dayElements[count].click()
+			foundFlag = True
+			break
+	if foundFlag == False:
+		for count in range(len(weekendElements)):
+			if weekendElements[count].text == str(targetDate.day):
+				return 2
+		return -1
 
 	#selects the court type and court location 
 	courtType.send_keys("Crown Court")
@@ -76,19 +188,13 @@ def FillSearchFields():
 	searchButton.click()
 
 	#waits until the results are loaded
-	WebDriverWait(driver, 10).until(lambda d: d.find_element_by_id("myTable"))
+	try:
+		WebDriverWait(driver, 5).until(lambda d: d.find_element_by_id("myTable"))
+	except:
+		return 2
+	return 1
 
-def CheckID(ID):
-	#checks if the passed ID already is held in the database
-	query = db.select([records]).where(records.columns.ID == ID)
-	resultProxy = connection.execute(query)
-	results = resultProxy.fetchall()
-	if len(results) < 1:
-		return True
-	else:
-		return False
-
-def LoadEntry():
+def LoadEntryPage(driver):
 	html = driver.page_source
 	soup = BeautifulSoup(html, features="lxml")
 
@@ -113,49 +219,17 @@ def LoadEntry():
 	WebDriverWait(driver, 10).until(lambda d: d.find_element_by_id("maincontent"))
 	return ID
 
-def NextResultPage(targetPage):
-	driver.implicitly_wait(2)
-	try:
-		#gets the page number and links
-		pageNosParent = driver.find_element_by_class_name('pagination')
-		currentPageButton = pageNosParent.find_element_by_class_name('current')
-		currentPageText = currentPageButton.text
-		#clicks to the next page if the current page has been exhausted
-		if str(targetPage) == currentPageText:
-			nextButton = driver.find_element_by_class_name('next')
-			nextButton.click()
-			return 1
-		try: 
-			#if the target page is one of the page links clicks the link
-			targetLink = driver.find_element_by_link_text(targetPage)
-			targetLink.click()
-			return 1
-		except:
-			#if rerunning the program with an existing database clicks 
-			if targetPage == 0:
-				nextButton = driver.find_element_by_class_name('next')
-				nextButton.click()
-			#clicks onto the furtherst most page link towards the desired page
-			else:
-				if currentPageText == '1':
-					pageLink = driver.find_element_by_xpath('/html/body/div[7]/div[9]/table[1]/tbody/tr[1]/td/table/tbody/tr/td/div/a[6]')
-					pageLink.click()
-				else:
-					pageLink = driver.find_element_by_xpath('/html/body/div[7]/div[9]/table[1]/tbody/tr[1]/td/table/tbody/tr/td/div/a[7]')
-					pageLink.click()
-			return 1
-	except:
-		pass
-	#if an ad appears reloads the page
-	try:
-		dismissButton = driver.find_element_by_xpath('/html/body/div/div[1]/div[1]')
-		driver.refresh()
-		return 1
-	except:
-		pass
-	return -1
+def CheckID(ID):
+	#checks if the passed ID already is held in the database
+	query = db.select([records]).where(records.columns.ID == ID)
+	resultProxy = connection.execute(query)
+	results = resultProxy.fetchall()
+	if len(results) < 1:
+		return True
+	else:
+		return False
 
-def ScrapeEntry():
+def ScrapeEntry(driver):
 	html = driver.page_source
 	soup = BeautifulSoup(html, features="lxml")
 
@@ -329,19 +403,42 @@ def PassInEntry(records, entryData):
 		query = db.insert(records).values(ID=str(entryData[0]), CaseNumber=str(entryData[5]), Date=ConvertToDate(entryData[2]), Name=str(entryData[6]), Country=str(entryData[1]), Court=str(entryData[3]), Judge=str(entryData[4]), Gender=str(entryData[7]), Age=holdAge, CoDefendants=str(entryData[9]), BailPosition=str(entryData[10]), Charges=str(string_token.join(entryData[11])), Sentances=str(string_token.join(entryData[12])), Order=str(entryData[13]), PublicProtectionSentence=str(entryData[15]), SentencingConsiderations=str(entryData[14]), MitigatingAndAggravatingFactors=str(entryData[18]), Sentenced=str(entryData[19]), TotalSentence=str(entryData[16]), EarliestReleaseDate=ConvertToDate(entryData[17]) , ProsecutingAuthority=str(entryData[20]), PoliceArea=str(entryData[21]))
 	commit = engine.execute(query)
 
-def CheckForCaptcha():
+def CheckForCaptcha(driver):
 	try:
 		findCaptcha = driver.find_element_by_id('captcha')
 		return True
 	except:
 		return False
 
+def mainloop(driver):
+	searchAttempt = FillSearchFields(driver, currentDate)
+	if searchAttempt == 2:
+		currentDate.Next_Day()
+	elif searchAttempt == -1:
+		print('INVALID DAY!')
+		return -1
+	elif searchAttempt == 1:
+		driver.implicitly_wait(1)
+		entryID = LoadEntryPage(driver)
+		captchaCheck = CheckForCaptcha(driver)
+		if captchaCheck == True:
+			captchaCheck = False
+			return 1
+		elif entryID == -1:
+			currentDate.Next_Day()
+		else:
+			scrapedEntryData = ScrapeEntry(driver)
+			valuesEntryData = ExtractValuesFromData(scrapedEntryData, entryID)
+			PassInEntry(records, valuesEntryData)
+			print(valuesEntryData)
+			print('')
+	return 0
+			
+
+captchaCheck = False
+
 startTime = datetime.datetime.now()
 print('Start Time: ' + str(startTime))
-
-Chrome(executable_path='C:/WebDriver/bin/chromedriver')
-driver = Chrome()
-Login() 
 
 #sets up the table
 engine = db.create_engine('sqlite:///SQLite-Test-Database.db')
@@ -353,52 +450,28 @@ if foundTable == False:
 else:
 	records = db.Table('records', metadata, autoload=True, autoload_with=engine)
 
-captchaCheck = False
-count = 0
-nextPage = 0
-targetPage = 0
-currentPage = 1
-exceptionCount = 0
-while count < 10000:
+Chrome(executable_path='C:/WebDriver/bin/chromedriver')
+driver = Chrome()
+Login(driver)
+
+currentDate = CalendarDate(CalStartDay, CalStartMonth, CalStartYear)
+while currentDate.day != CalEndDay or currentDate.month != CalEndMonth or currentDate.year != CalEndYear:
 	try:
-		if nextPage == 0:
-			FillSearchFields() 
-		nextPage = 0
-		currentPage = driver.find_element_by_class_name('current').text
-		entryID = LoadEntry()
-		captchaCheck = CheckForCaptcha()
-		if captchaCheck == True:
-			captchaCheck = False
-			nextPage == 0
-			driver.quit()
-			driver = Chrome()
-			driver.implicitly_wait(2)
-			Login()
-		elif str(entryID) != '-1':
-			targetPage = currentPage
-			print('targetPage: ' + str(targetPage))
-			scrapedEntryData = ScrapeEntry()
-			valuesEntryData = ExtractValuesFromData(scrapedEntryData, entryID)
-			print(valuesEntryData)
-			if EndDate in valuesEntryData[2]:
-				print('Scraped all records within specified time frame')
+		with timeLimit(30, 'sleep'):
+			loopStatus = mainloop(driver)
+			if loopStatus == -1:
 				break
-			PassInEntry(records, valuesEntryData)
-			count = count + 1
-			print('count: '+ str(count))
-		else:
-			nextPage = NextResultPage(targetPage)
-			if nextPage == -1:
-				break
-		exceptionCount = 0
-	except:
-		exceptionCount = exceptionCount + 1
-		print('exception check')
-		if exceptionCount > 3:
-			print('EXCEPTION FOUND!')
-			break
+			elif loopStatus == 1:
+				driver.quit()
+				driver = Chrome()
+				driver.implicitly_wait(1)
+				Login(driver)
+	except Exception as e:
+		print('Exception Thrown')
+		print(e)
+		pass
 
-
+print('Finished Scrape!')
 endTime = datetime.datetime.now()
 elapsedTime = endTime - startTime
 print('End Time: ' + str(endTime))
