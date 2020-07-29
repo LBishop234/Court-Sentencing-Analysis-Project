@@ -13,11 +13,11 @@ Password = "Canford2014B"
 #inclusive
 CalStartDay = 1
 CalStartMonth = "January"
-CalStartYear = 2019
+CalStartYear = 2018
 #exclusive
 CalEndDay = 1
 CalEndMonth = "January"
-CalEndYear = 2020
+CalEndYear = 2019
 
 class CalendarDate:
 	day = 0
@@ -36,8 +36,8 @@ class CalendarDate:
 
 	def Next_Month(self):
 		if self.month == 'January':
-			self.month = 'Febuary'
-		elif self.month == 'Febuary':
+			self.month = 'February'
+		elif self.month == 'February':
 			self.month = 'March'
 		elif self.month == 'March':
 			self.month = 'April'
@@ -59,31 +59,25 @@ class CalendarDate:
 			self.month = 'December'
 		elif self.month == 'December':
 			self.month = 'January'
-
-	def Next_Day(self):
-		if self.day < 30 and self.day != 28:
-			self.day = self.day + 1
-		elif self.day == 28:
-			if self.month == 'Febuary':
-				self.day = 1
-				Next_Month()
-			else:
-				self.day = self.day + 1
-		elif self.day == 30:
-			if self.month == 'April' or self.month == 'June' or self.month == 'September' or self.month == 'November':
-				self.day = 1
-				Next_Month()
-			else:
-				self.day = self.day + 1
-		elif self.day == 31:
-			if self.month == 'December':
-				Next_Year()
-			self.day = 1
-			Next_Month()
+			self.Next_Year()
 
 	def Next_Year(self):
 		#blah
 		self.year = self.year + 1
+
+	def Next_Day(self):
+		if self.day == 28 and self.month == 'February':
+			self.day = 1
+			self.Next_Month()
+		elif self.day == 30 and (self.month == 'April' or self.month == 'June' or self.month == 'September' or self.month == 'November'):
+			self.day = 1
+			self.Next_Month()
+		elif self.day == 31:
+			self.day = 1
+			self.Next_Month()
+		else:
+			self.day = self.day + 1
+
 
 class TimeoutException(Exception):
 	def __init__(self, msg=''):
@@ -270,7 +264,7 @@ def ScrapeEntry(driver):
 def ExtractValuesFromData(dataList, ID):
 	count = 0
 	flag = False
-	data = [None] * 22
+	data = [None] * 23
 	charges = []
 	sentances = []
 	#disgusting if statement selecting the column values from the text list
@@ -345,6 +339,12 @@ def ConvertToDate(preDate):
 		elif str(preDate).find('/') != -1:
 			dateList = preDate.split('/')
 		flag = False
+		if dateList[0] == '0':
+			dateList[0] = '1'
+		if dateList[1] == '0':
+			dateList[1] = '1'
+		if dateList[2] == '0':
+			dataList[2] = '1'
 		while flag == False:
 			try:
 				date = datetime.date(int(dateList[2]), int(dateList[1]), int(dateList[0]))
@@ -382,6 +382,7 @@ def CreateTable():
 		db.Column('PublicProtectionSentence', db.String),
 		db.Column('SentencingConsiderations', db.String),
 		db.Column('MitigatingAndAggravatingFactors', db.String),
+		#db.Column('DefendantHasSimilarPreviousConvictions', db.String),
 		db.Column('Sentenced', db.String),
 		db.Column('TotalSentence', db.String),
 		db.Column('EarliestReleaseDate', db.Date),
@@ -397,11 +398,15 @@ def PassInEntry(records, entryData):
 		holdAge = int(entryData[8])
 	except:
 		holdAge = None
-	if entryData[5] == None:
-		query = db.insert(records).values(ID=str(entryData[0]))
-	else:	
-		query = db.insert(records).values(ID=str(entryData[0]), CaseNumber=str(entryData[5]), Date=ConvertToDate(entryData[2]), Name=str(entryData[6]), Country=str(entryData[1]), Court=str(entryData[3]), Judge=str(entryData[4]), Gender=str(entryData[7]), Age=holdAge, CoDefendants=str(entryData[9]), BailPosition=str(entryData[10]), Charges=str(string_token.join(entryData[11])), Sentances=str(string_token.join(entryData[12])), Order=str(entryData[13]), PublicProtectionSentence=str(entryData[15]), SentencingConsiderations=str(entryData[14]), MitigatingAndAggravatingFactors=str(entryData[18]), Sentenced=str(entryData[19]), TotalSentence=str(entryData[16]), EarliestReleaseDate=ConvertToDate(entryData[17]) , ProsecutingAuthority=str(entryData[20]), PoliceArea=str(entryData[21]))
-	commit = engine.execute(query)
+	try:
+		with timeLimit(10, 'pass in records'):
+			if entryData[5] == None:
+				query = db.insert(records).values(ID=str(entryData[0]))
+			else:	
+				query = db.insert(records).values(ID=str(entryData[0]), CaseNumber=str(entryData[5]), Date=ConvertToDate(entryData[2]), Name=str(entryData[6]), Country=str(entryData[1]), Court=str(entryData[3]), Judge=str(entryData[4]), Gender=str(entryData[7]), Age=holdAge, CoDefendants=str(entryData[9]), BailPosition=str(entryData[10]), Charges=str(string_token.join(entryData[11])), Sentances=str(string_token.join(entryData[12])), Order=str(entryData[13]), PublicProtectionSentence=str(entryData[15]), SentencingConsiderations=str(entryData[14]), MitigatingAndAggravatingFactors=str(entryData[18]), Sentenced=str(entryData[19]), TotalSentence=str(entryData[16]), EarliestReleaseDate=ConvertToDate(entryData[17]) , ProsecutingAuthority=str(entryData[20]), PoliceArea=str(entryData[21]))
+			commit = engine.execute(query)
+	except:
+		pass
 
 def CheckForCaptcha(driver):
 	try:
@@ -414,6 +419,7 @@ def mainloop(driver):
 	searchAttempt = FillSearchFields(driver, currentDate)
 	if searchAttempt == 2:
 		currentDate.Next_Day()
+		return 2
 	elif searchAttempt == -1:
 		print('INVALID DAY!')
 		return -1
@@ -426,22 +432,20 @@ def mainloop(driver):
 			return 1
 		elif entryID == -1:
 			currentDate.Next_Day()
+			return 2
 		else:
 			scrapedEntryData = ScrapeEntry(driver)
 			valuesEntryData = ExtractValuesFromData(scrapedEntryData, entryID)
 			PassInEntry(records, valuesEntryData)
 			print(valuesEntryData)
-			print('')
-	return 0
+		return 0
 			
-
-captchaCheck = False
 
 startTime = datetime.datetime.now()
 print('Start Time: ' + str(startTime))
 
 #sets up the table
-engine = db.create_engine('sqlite:///SQLite-Test-Database.db')
+engine = db.create_engine('sqlite:///SQLite-Main-Database.db')
 connection = engine.connect()
 metadata = db.MetaData()
 foundTable = CheckingForTable(engine)
@@ -454,6 +458,8 @@ Chrome(executable_path='C:/WebDriver/bin/chromedriver')
 driver = Chrome()
 Login(driver)
 
+entryCount = 0
+exceptionCount = 0
 currentDate = CalendarDate(CalStartDay, CalStartMonth, CalStartYear)
 while currentDate.day != CalEndDay or currentDate.month != CalEndMonth or currentDate.year != CalEndYear:
 	try:
@@ -466,10 +472,19 @@ while currentDate.day != CalEndDay or currentDate.month != CalEndMonth or curren
 				driver = Chrome()
 				driver.implicitly_wait(1)
 				Login(driver)
+			elif loopStatus == 0:
+				entryCount = entryCount + 1
+				print('count: ' + str(entryCount))
+				print('')
+		exceptionCount = 0
 	except Exception as e:
 		print('Exception Thrown')
 		print(e)
-		pass
+		exceptionCount = exceptionCount + 1
+		if exceptionCount < 3:
+			pass
+		else:
+			break
 
 print('Finished Scrape!')
 endTime = datetime.datetime.now()
