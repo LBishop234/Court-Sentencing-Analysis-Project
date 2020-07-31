@@ -13,11 +13,11 @@ Password = "Canford2014B"
 #inclusive
 CalStartDay = 1
 CalStartMonth = "January"
-CalStartYear = 2018
+CalStartYear = 2020
 #exclusive
 CalEndDay = 1
-CalEndMonth = "January"
-CalEndYear = 2019
+CalEndMonth = "July"
+CalEndYear = 2020
 
 class CalendarDate:
 	day = 0
@@ -355,6 +355,28 @@ def ConvertToDate(preDate):
 	except:
 		return None
 
+def ConvertTotalSentence(sentenceText):
+	sumDays = 0
+	try:
+		yearsText = re.search(r'\d+ Years', sentenceText)
+		years = re.search(r'\d+', yearsText.group())
+		sumDays = sumDays + (int(years.group()) * 365)
+	except:
+		pass
+	try:
+		monthsText = re.search(r'\d+ Months', sentenceText)
+		months = re.search(r'\d+', monthsText.group())
+		sumDays = sumDays + (int(months.group()) * 30)
+	except:
+		pass
+	try:
+		daysText = re.search(r'\d+ Days', sentenceText)
+		days = re.search(r'\d+', daysText.group())
+		sumDays = sumDays + int(days.group())
+	except:
+		pass
+	return sumDays
+
 def CheckingForTable(engine):
 	#checks if the record table exists
 	tables = engine.table_names()
@@ -384,7 +406,7 @@ def CreateTable():
 		db.Column('MitigatingAndAggravatingFactors', db.String),
 		#db.Column('DefendantHasSimilarPreviousConvictions', db.String),
 		db.Column('Sentenced', db.String),
-		db.Column('TotalSentence', db.String),
+		db.Column('TotalSentence', db.Integer),
 		db.Column('EarliestReleaseDate', db.Date),
 		db.Column('ProsecutingAuthority', db.String),
 		db.Column('PoliceArea', db.String)
@@ -399,11 +421,15 @@ def PassInEntry(records, entryData):
 	except:
 		holdAge = None
 	try:
+		holdTotalSentence = ConvertTotalSentence(str(entryData[16]))
+	except:
+		holdTotalSentence = None
+	try:
 		with timeLimit(10, 'pass in records'):
 			if entryData[5] == None:
 				query = db.insert(records).values(ID=str(entryData[0]))
 			else:	
-				query = db.insert(records).values(ID=str(entryData[0]), CaseNumber=str(entryData[5]), Date=ConvertToDate(entryData[2]), Name=str(entryData[6]), Country=str(entryData[1]), Court=str(entryData[3]), Judge=str(entryData[4]), Gender=str(entryData[7]), Age=holdAge, CoDefendants=str(entryData[9]), BailPosition=str(entryData[10]), Charges=str(string_token.join(entryData[11])), Sentances=str(string_token.join(entryData[12])), Order=str(entryData[13]), PublicProtectionSentence=str(entryData[15]), SentencingConsiderations=str(entryData[14]), MitigatingAndAggravatingFactors=str(entryData[18]), Sentenced=str(entryData[19]), TotalSentence=str(entryData[16]), EarliestReleaseDate=ConvertToDate(entryData[17]) , ProsecutingAuthority=str(entryData[20]), PoliceArea=str(entryData[21]))
+				query = db.insert(records).values(ID=str(entryData[0]), CaseNumber=str(entryData[5]), Date=ConvertToDate(entryData[2]), Name=str(entryData[6]), Country=str(entryData[1]), Court=str(entryData[3]), Judge=str(entryData[4]), Gender=str(entryData[7]), Age=holdAge, CoDefendants=str(entryData[9]), BailPosition=str(entryData[10]), Charges=str(string_token.join(entryData[11])), Sentances=str(string_token.join(entryData[12])), Order=str(entryData[13]), PublicProtectionSentence=str(entryData[15]), SentencingConsiderations=str(entryData[14]), MitigatingAndAggravatingFactors=str(entryData[18]), Sentenced=str(entryData[19]), TotalSentence=holdTotalSentence, EarliestReleaseDate=ConvertToDate(entryData[17]) , ProsecutingAuthority=str(entryData[20]), PoliceArea=str(entryData[21]))
 			commit = engine.execute(query)
 	except:
 		pass
